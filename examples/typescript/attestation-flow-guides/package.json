@@ -15,9 +15,11 @@
   },
   "packageManager": "pnpm@10.12.3",
   "dependencies": {
+    "@lightprotocol/stateless.js": "0.22.1-alpha.1",
     "@solana-program/compute-budget": "^0.11.0",
     "@solana-program/token-2022": "^0.6.1",
     "@solana/kit": "^5.0.0",
+    "@solana/web3.js": "^1.95.8",
     "gill": "^0.10.2",
     "sas-lib": "^1.0.10"
   },
