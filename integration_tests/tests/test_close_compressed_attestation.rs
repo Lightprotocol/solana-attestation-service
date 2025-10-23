@@ -518,7 +518,7 @@ async fn test_close_compressed_attestation_wrong_credential() {
         )
         .await;
 
-    // Assert fails with error code 14307 invalide credential produces invalid hash.
+    // Assert fails with error code 14307 invalid credential produces invalid hash.
     // Alternatively fails with proof generation failed.
     assert_rpc_error(result, 0, 14307).unwrap();
 }

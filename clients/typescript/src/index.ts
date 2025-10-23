@@ -8,3 +8,4 @@ export * from "./pdas";
 export * from "./utils";
 export * from "./constants";
 export * from "./compressed";
+export * from "./create-compression-lookup-table";
