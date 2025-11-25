@@ -7,5 +7,3 @@
  */
 
 export * from './closeAttestationEvent';
-export * from './compressAttestation';
-export * from './compressAttestationEvent';

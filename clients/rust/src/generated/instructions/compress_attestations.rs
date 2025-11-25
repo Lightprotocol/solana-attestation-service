@@ -133,7 +133,6 @@ impl Default for CompressAttestationsInstructionData {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct CompressAttestationsInstructionArgs {
     pub proof: [u8; 128],
-    pub close_accounts: bool,
     pub address_root_index: u16,
     pub num_attestations: u8,
 }
@@ -169,7 +168,6 @@ pub struct CompressAttestationsBuilder {
     output_queue: Option<solana_program::pubkey::Pubkey>,
     address_merkle_tree: Option<solana_program::pubkey::Pubkey>,
     proof: Option<[u8; 128]>,
-    close_accounts: Option<bool>,
     address_root_index: Option<u16>,
     num_attestations: Option<u8>,
     __remaining_accounts: Vec<solana_program::instruction::AccountMeta>,
@@ -282,11 +280,6 @@ impl CompressAttestationsBuilder {
         self
     }
     #[inline(always)]
-    pub fn close_accounts(&mut self, close_accounts: bool) -> &mut Self {
-        self.close_accounts = Some(close_accounts);
-        self
-    }
-    #[inline(always)]
     pub fn address_root_index(&mut self, address_root_index: u16) -> &mut Self {
         self.address_root_index = Some(address_root_index);
         self
@@ -349,10 +342,6 @@ impl CompressAttestationsBuilder {
             };
         let args = CompressAttestationsInstructionArgs {
             proof: self.proof.clone().expect("proof is not set"),
-            close_accounts: self
-                .close_accounts
-                .clone()
-                .expect("close_accounts is not set"),
             address_root_index: self
                 .address_root_index
                 .clone()
@@ -612,7 +601,6 @@ impl<'a, 'b> CompressAttestationsCpiBuilder<'a, 'b> {
             output_queue: None,
             address_merkle_tree: None,
             proof: None,
-            close_accounts: None,
             address_root_index: None,
             num_attestations: None,
             __remaining_accounts: Vec::new(),
@@ -729,11 +717,6 @@ impl<'a, 'b> CompressAttestationsCpiBuilder<'a, 'b> {
         self
     }
     #[inline(always)]
-    pub fn close_accounts(&mut self, close_accounts: bool) -> &mut Self {
-        self.instruction.close_accounts = Some(close_accounts);
-        self
-    }
-    #[inline(always)]
     pub fn address_root_index(&mut self, address_root_index: u16) -> &mut Self {
         self.instruction.address_root_index = Some(address_root_index);
         self
@@ -786,11 +769,6 @@ impl<'a, 'b> CompressAttestationsCpiBuilder<'a, 'b> {
     ) -> solana_program::entrypoint::ProgramResult {
         let args = CompressAttestationsInstructionArgs {
             proof: self.instruction.proof.clone().expect("proof is not set"),
-            close_accounts: self
-                .instruction
-                .close_accounts
-                .clone()
-                .expect("close_accounts is not set"),
             address_root_index: self
                 .instruction
                 .address_root_index
@@ -877,7 +855,6 @@ struct CompressAttestationsCpiBuilderInstruction<'a, 'b> {
     output_queue: Option<&'b solana_program::account_info::AccountInfo<'a>>,
     address_merkle_tree: Option<&'b solana_program::account_info::AccountInfo<'a>>,
     proof: Option<[u8; 128]>,
-    close_accounts: Option<bool>,
     address_root_index: Option<u16>,
     num_attestations: Option<u8>,
     /// Additional instruction accounts `(AccountInfo, is_writable, is_signer)`.

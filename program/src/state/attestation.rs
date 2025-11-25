@@ -34,7 +34,7 @@ pub struct Attestation {
 
 impl Attestation {
     pub fn hash(&self) -> [u8; 32] {
-        let mut metadata1 = [0u8; 96]; // 4 * 32 bytes for Pubkey
+        let mut metadata1 = [0u8; 96]; // 3 * 32 bytes for Pubkey
         metadata1[..32].copy_from_slice(self.nonce.as_ref());
         metadata1[32..64].copy_from_slice(self.signer.as_ref());
         metadata1[64..96].copy_from_slice(self.token_account.as_ref());
@@ -44,10 +44,11 @@ impl Attestation {
         metadata2[32..64].copy_from_slice(self.credential.as_ref());
         metadata2[64..72].copy_from_slice(&self.expiry.to_le_bytes());
 
-        // # SAFETY Sha256BE unwrap cannot fail.
+        // # SAFETY Sha256 unwrap cannot fail.
         let metadata_hash = Sha256::hash(&metadata1).unwrap();
         let metadata2_hash = Sha256::hash(&metadata2).unwrap();
         let data_hash = Sha256::hash(&self.data).unwrap();
+        // # SAFETY Sha256BE unwrap cannot fail.
         Sha256BE::hashv(&[
             metadata_hash.as_slice(),
             metadata2_hash.as_slice(),

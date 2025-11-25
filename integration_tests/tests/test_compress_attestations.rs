@@ -1,4 +1,4 @@
-use borsh::{BorshDeserialize, BorshSerialize};
+use borsh::BorshSerialize;
 use light_program_test::{
     program_test::LightProgramTest, utils::assert::assert_rpc_error, AddressWithTree, Indexer,
     ProgramTestConfig, Rpc,
@@ -16,7 +16,6 @@ use solana_attestation_service_client::{
         derive_schema_pda,
     },
     programs::SOLANA_ATTESTATION_SERVICE_ID,
-    types::{CompressAttestation, CompressAttestationEvent},
     ALLOWED_ADDRESS_TREE,
 };
 use solana_sdk::{
@@ -152,7 +151,7 @@ async fn setup(num_attestations: usize) -> TestFixtures {
 }
 
 #[tokio::test]
-async fn test_compress_1_attestation_no_close() {
+async fn test_compress_1_attestation() {
     let TestFixtures {
         mut rpc,
         payer,
@@ -200,267 +199,7 @@ async fn test_compress_1_attestation_no_close() {
     // Get address root index from the validity proof result
     let address_root_index = rpc_result.addresses[0].root_index;
 
-    // Compress attestation (no close)
-    let compress_ix = CompressAttestationsBuilder::new()
-        .payer(payer.pubkey())
-        .authority(authority.pubkey())
-        .credential(credential)
-        .event_authority(event_authority)
-        .output_queue(output_queue)
-        .add_remaining_account(AccountMeta::new_readonly(attestation_pda, false)) // Not writable since not closing
-        .proof(proof_bytes)
-        .close_accounts(false)
-        .address_root_index(address_root_index)
-        .num_attestations(1)
-        .instruction();
-
-    rpc.create_and_send_transaction(&[compress_ix], &payer.pubkey(), &[&payer, &authority])
-        .await
-        .unwrap();
-
-    // Verify compressed account was created
-    let compressed_account = rpc
-        .get_compressed_account(compressed_address, None)
-        .await
-        .unwrap()
-        .value
-        .unwrap();
-
-    assert_eq!(compressed_account.address.unwrap(), compressed_address);
-
-    // Verify lamports are 0 (compressed accounts don't store lamports)
-    assert_eq!(
-        compressed_account.lamports, 0,
-        "Compressed account should have 0 lamports"
-    );
-
-    // Verify discriminator is correct
-    assert_eq!(
-        compressed_account.data.as_ref().unwrap().discriminator,
-        [2, 0, 0, 0, 0, 0, 0, 0],
-        "Discriminator should match Attestation::LIGHT_DISCRIMINATOR"
-    );
-
-    // Verify address derivation is deterministic
-    let (re_derived_address, _) = derive_address(
-        &[attestation_pda.as_ref()],
-        &address_tree_pubkey,
-        &SOLANA_ATTESTATION_SERVICE_ID,
-    );
-    assert_eq!(
-        compressed_address, re_derived_address,
-        "Address derivation should be deterministic"
-    );
-
-    // Verify compressed account data matches original attestation
-    let compressed_attestation =
-        Attestation::from_bytes(&compressed_account.data.as_ref().unwrap().data).unwrap();
-    assert_eq!(compressed_attestation.credential, credential);
-    assert_eq!(compressed_attestation.schema, schema);
-    assert_eq!(compressed_attestation.signer, authority.pubkey());
-    assert_eq!(compressed_attestation.token_account, Pubkey::default());
-
-    // Verify original PDA still exists (not closed) and has same data
-    let pda_account = rpc.get_account(attestation_pda).await.unwrap();
-    assert!(pda_account.is_some(), "PDA should still exist");
-
-    let pda_attestation = Attestation::from_bytes(&pda_account.unwrap().data).unwrap();
-    assert_eq!(pda_attestation.credential, credential);
-    assert_eq!(pda_attestation.schema, schema);
-    assert_eq!(pda_attestation.signer, authority.pubkey());
-
-    // Verify both have same data
-    assert_eq!(compressed_attestation.nonce, pda_attestation.nonce);
-    assert_eq!(compressed_attestation.data, pda_attestation.data);
-    assert_eq!(compressed_attestation.expiry, pda_attestation.expiry);
-    assert_eq!(
-        compressed_account.data.as_ref().unwrap().data_hash,
-        hash(&compressed_attestation),
-        "Discriminator should match Attestation::LIGHT_DISCRIMINATOR"
-    );
-}
-
-#[tokio::test]
-async fn test_compress_2_attestations_no_close() {
-    let TestFixtures {
-        mut rpc,
-        payer,
-        credential,
-        schema,
-        authority,
-        address_tree_pubkey,
-        attestations,
-        ..
-    } = setup(2).await;
-
-    let attestation_pda_1 = attestations[0];
-    let attestation_pda_2 = attestations[1];
-
-    // Derive compressed addresses from PDAs
-    let (compressed_address_1, _) = derive_address(
-        &[attestation_pda_1.as_ref()],
-        &address_tree_pubkey,
-        &SOLANA_ATTESTATION_SERVICE_ID,
-    );
-    let (compressed_address_2, _) = derive_address(
-        &[attestation_pda_2.as_ref()],
-        &address_tree_pubkey,
-        &SOLANA_ATTESTATION_SERVICE_ID,
-    );
-
-    // Get validity proof for both new compressed addresses
-    let rpc_result = rpc
-        .get_validity_proof(
-            vec![],
-            vec![
-                AddressWithTree {
-                    address: compressed_address_1,
-                    tree: address_tree_pubkey,
-                },
-                AddressWithTree {
-                    address: compressed_address_2,
-                    tree: address_tree_pubkey,
-                },
-            ],
-            None,
-        )
-        .await
-        .unwrap()
-        .value;
-
-    let event_authority = derive_event_authority_pda();
-    let output_queue = rpc.get_random_state_tree_info().unwrap().queue;
-
-    // Serialize proof to fixed array [u8; 128]
-
-    let proof_bytes: [u8; 128] = rpc_result.proof.0.unwrap().to_array();
-    let address_root_index = rpc_result.addresses[0].root_index;
-
-    // Compress both attestations (no close)
-    let compress_ix = CompressAttestationsBuilder::new()
-        .payer(payer.pubkey())
-        .authority(authority.pubkey())
-        .credential(credential)
-        .event_authority(event_authority)
-        .output_queue(output_queue)
-        .add_remaining_account(AccountMeta::new_readonly(attestation_pda_1, false))
-        .add_remaining_account(AccountMeta::new_readonly(attestation_pda_2, false))
-        .proof(proof_bytes)
-        .close_accounts(false)
-        .address_root_index(address_root_index)
-        .num_attestations(2)
-        .instruction();
-
-    rpc.create_and_send_transaction(&[compress_ix], &payer.pubkey(), &[&payer, &authority])
-        .await
-        .unwrap();
-
-    // Verify both compressed accounts were created
-    let compressed_account_1 = rpc
-        .get_compressed_account(compressed_address_1, None)
-        .await
-        .unwrap()
-        .value
-        .unwrap();
-    let compressed_account_2 = rpc
-        .get_compressed_account(compressed_address_2, None)
-        .await
-        .unwrap()
-        .value
-        .unwrap();
-
-    assert_eq!(compressed_account_1.address.unwrap(), compressed_address_1);
-    assert_eq!(compressed_account_2.address.unwrap(), compressed_address_2);
-
-    // Verify compressed account data
-    let compressed_attestation_1 =
-        Attestation::from_bytes(&compressed_account_1.data.as_ref().unwrap().data).unwrap();
-    let compressed_attestation_2 =
-        Attestation::from_bytes(&compressed_account_2.data.as_ref().unwrap().data).unwrap();
-
-    assert_eq!(compressed_attestation_1.credential, credential);
-    assert_eq!(compressed_attestation_1.schema, schema);
-    assert_eq!(compressed_attestation_2.credential, credential);
-    assert_eq!(compressed_attestation_2.schema, schema);
-
-    // Verify original PDAs still exist (not closed)
-    let pda_account_1 = rpc.get_account(attestation_pda_1).await.unwrap();
-    let pda_account_2 = rpc.get_account(attestation_pda_2).await.unwrap();
-    assert!(pda_account_1.is_some(), "PDA 1 should still exist");
-    assert!(pda_account_2.is_some(), "PDA 2 should still exist");
-
-    let pda_attestation_1 = Attestation::from_bytes(&pda_account_1.unwrap().data).unwrap();
-    let pda_attestation_2 = Attestation::from_bytes(&pda_account_2.unwrap().data).unwrap();
-
-    // Verify both PDAs and compressed accounts match
-    assert_eq!(compressed_attestation_1.nonce, pda_attestation_1.nonce);
-    assert_eq!(compressed_attestation_1.data, pda_attestation_1.data);
-    assert_eq!(compressed_attestation_2.nonce, pda_attestation_2.nonce);
-    assert_eq!(compressed_attestation_2.data, pda_attestation_2.data);
-
-    // Verify hash computation for both attestations
-    assert_eq!(
-        compressed_account_1.data.as_ref().unwrap().data_hash,
-        hash(&compressed_attestation_1),
-        "Hash should match for attestation 1"
-    );
-    assert_eq!(
-        compressed_account_2.data.as_ref().unwrap().data_hash,
-        hash(&compressed_attestation_2),
-        "Hash should match for attestation 2"
-    );
-}
-
-#[tokio::test]
-async fn test_compress_1_attestation_with_close() {
-    let TestFixtures {
-        mut rpc,
-        payer,
-        credential,
-        schema,
-        authority,
-        address_tree_pubkey,
-        attestations,
-        ..
-    } = setup(1).await;
-
-    let attestation_pda = attestations[0];
-
-    // Derive compressed address from PDA
-    let (compressed_address, _) = derive_address(
-        &[attestation_pda.as_ref()],
-        &address_tree_pubkey,
-        &SOLANA_ATTESTATION_SERVICE_ID,
-    );
-
-    // Get validity proof for the new compressed address
-    let rpc_result = rpc
-        .get_validity_proof(
-            vec![],
-            vec![AddressWithTree {
-                address: compressed_address,
-                tree: address_tree_pubkey,
-            }],
-            None,
-        )
-        .await
-        .unwrap()
-        .value;
-
-    // Derive event authority
-    let event_authority = derive_event_authority_pda();
-
-    // Get tree pubkeys
-    let output_queue = rpc.get_random_state_tree_info().unwrap().queue;
-
-    // Serialize proof to fixed array [u8; 128]
-
-    let proof_bytes: [u8; 128] = rpc_result.proof.0.unwrap().to_array();
-
-    // Get address root index from the validity proof result
-    let address_root_index = rpc_result.addresses[0].root_index;
-
-    // Compress attestation with close
+    // Compress attestation
     let compress_ix = CompressAttestationsBuilder::new()
         .payer(payer.pubkey())
         .authority(authority.pubkey())
@@ -469,7 +208,6 @@ async fn test_compress_1_attestation_with_close() {
         .output_queue(output_queue)
         .add_remaining_account(AccountMeta::new(attestation_pda, false)) // Writable since closing
         .proof(proof_bytes)
-        .close_accounts(true)
         .address_root_index(address_root_index)
         .num_attestations(1)
         .instruction();
@@ -509,7 +247,7 @@ async fn test_compress_1_attestation_with_close() {
 }
 
 #[tokio::test]
-async fn test_compress_2_attestations_with_close() {
+async fn test_compress_2_attestations() {
     let TestFixtures {
         mut rpc,
         payer,
@@ -564,7 +302,7 @@ async fn test_compress_2_attestations_with_close() {
     let proof_bytes: [u8; 128] = rpc_result.proof.0.unwrap().to_array();
     let address_root_index = rpc_result.addresses[0].root_index;
 
-    // Compress both attestations with close
+    // Compress both attestations
     let compress_ix = CompressAttestationsBuilder::new()
         .payer(payer.pubkey())
         .authority(authority.pubkey())
@@ -574,7 +312,6 @@ async fn test_compress_2_attestations_with_close() {
         .add_remaining_account(AccountMeta::new(attestation_pda_1, false)) // Writable since closing
         .add_remaining_account(AccountMeta::new(attestation_pda_2, false)) // Writable since closing
         .proof(proof_bytes)
-        .close_accounts(true)
         .address_root_index(address_root_index)
         .num_attestations(2)
         .instruction();
@@ -689,9 +426,8 @@ async fn test_compress_attestation_unauthorized_signer() {
         .credential(credential)
         .event_authority(event_authority)
         .output_queue(output_queue)
-        .add_remaining_account(AccountMeta::new_readonly(attestation_pda, false))
+        .add_remaining_account(AccountMeta::new(attestation_pda, false))
         .proof(proof_bytes)
-        .close_accounts(false)
         .address_root_index(address_root_index)
         .num_attestations(1)
         .instruction();
@@ -799,9 +535,8 @@ async fn test_compress_attestation_wrong_credential() {
         .credential(credential2_pda) // Using credential2 (WRONG - attestation belongs to credential1)
         .event_authority(event_authority)
         .output_queue(output_queue)
-        .add_remaining_account(AccountMeta::new_readonly(attestation_pda, false))
+        .add_remaining_account(AccountMeta::new(attestation_pda, false))
         .proof(proof_bytes)
-        .close_accounts(false)
         .address_root_index(address_root_index)
         .num_attestations(1)
         .instruction();
@@ -880,9 +615,8 @@ async fn test_compress_attestation_invalid_address_tree() {
         .event_authority(event_authority)
         .output_queue(output_queue)
         .address_merkle_tree(wrong_address_tree) // Using WRONG address tree
-        .add_remaining_account(AccountMeta::new_readonly(attestation_pda, false))
+        .add_remaining_account(AccountMeta::new(attestation_pda, false))
         .proof(proof_bytes)
-        .close_accounts(false)
         .address_root_index(address_root_index)
         .num_attestations(1)
         .instruction();
@@ -899,27 +633,4 @@ async fn test_compress_attestation_invalid_address_tree() {
         SolanaAttestationServiceError::InvalidAddressTree as u32,
     )
     .unwrap();
-}
-
-#[test]
-fn test_compress_attestation_event_serialization_roundtrip() {
-    let original = CompressAttestationEvent {
-        discriminator: 1,
-        pdas_closed: true,
-        attestations: vec![
-            CompressAttestation {
-                schema: Pubkey::new_unique(),
-                attestation_data: vec![10u8, 20, 30],
-            },
-            CompressAttestation {
-                schema: Pubkey::new_unique(),
-                attestation_data: vec![40u8, 50],
-            },
-        ],
-    };
-
-    let serialized = borsh::to_vec(&original).unwrap();
-    let deserialized = CompressAttestationEvent::try_from_slice(&serialized).unwrap();
-
-    assert_eq!(original, deserialized);
 }

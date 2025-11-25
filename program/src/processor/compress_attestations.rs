@@ -4,7 +4,7 @@ use crate::{
         MAX_COMPRESSED_ATTESTATION_SIZE,
     },
     error::AttestationServiceError,
-    events::{CompressAttestation, CompressAttestationEvent, EventDiscriminators},
+    events::{CloseAttestationEvent, EventDiscriminators},
     state::{Attestation, Credential},
 };
 extern crate alloc;
@@ -98,7 +98,7 @@ pub fn process_compress_attestations(
     // Loop through all attestation PDAs
     for attestation_info in attestation_accounts {
         // Validate attestation account ownership
-        verify_owner_mutability(attestation_info, program_id, args.close_accounts)?;
+        verify_owner_mutability(attestation_info, program_id, true)?;
 
         let attestation_data = attestation_info.try_borrow_data()?;
         let attestation = Attestation::try_from_bytes(&attestation_data)?;
@@ -144,76 +144,62 @@ pub fn process_compress_attestations(
         .with_new_addresses(&new_address_params)
         .invoke(light_cpi_accounts)?;
 
-    // Collect event data while closing accounts
-    let mut event_attestations = Vec::with_capacity(args.num_attestations as usize);
-
+    // Close accounts and emit CloseAttestationEvent for each
     for attestation_info in attestation_accounts {
         // Read attestation for event data BEFORE closing
         let attestation_data = attestation_info.try_borrow_data()?;
         let attestation = Attestation::try_from_bytes(&attestation_data)?;
 
-        event_attestations.push(CompressAttestation {
+        let event = CloseAttestationEvent {
+            discriminator: EventDiscriminators::CloseEvent as u8,
             schema: attestation.schema,
             attestation_data: attestation.data.clone(),
-        });
+        };
         drop(attestation_data);
 
-        if args.close_accounts {
-            // Close account and transfer rent to payer
-            let payer_lamports = payer_info.lamports();
-            let attestation_lamports = attestation_info.lamports();
-            *payer_info.try_borrow_mut_lamports()? = payer_lamports
-                .checked_add(attestation_lamports)
-                .ok_or(ProgramError::ArithmeticOverflow)?;
-            *attestation_info.try_borrow_mut_lamports()? = 0;
-            attestation_info.close()?;
-        }
+        // Close account and transfer rent to payer
+        let payer_lamports = payer_info.lamports();
+        let attestation_lamports = attestation_info.lamports();
+        *payer_info.try_borrow_mut_lamports()? = payer_lamports
+            .checked_add(attestation_lamports)
+            .ok_or(ProgramError::ArithmeticOverflow)?;
+        *attestation_info.try_borrow_mut_lamports()? = 0;
+        attestation_info.close()?;
+
+        // Emit CloseAttestationEvent for this attestation
+        invoke_signed(
+            &Instruction {
+                program_id,
+                accounts: &[AccountMeta::new(event_authority_info.key(), false, true)],
+                data: event.to_bytes().as_slice(),
+            },
+            &[event_authority_info],
+            &[Signer::from(&[
+                Seed::from(EVENT_AUTHORITY_SEED),
+                Seed::from(&[event_authority_pda::BUMP]),
+            ])],
+        )?;
     }
-
-    // Emit single CompressAttestationEvent for the batch
-    let event = CompressAttestationEvent {
-        discriminator: EventDiscriminators::CompressEvent as u8,
-        pdas_closed: args.close_accounts,
-        attestations: event_attestations,
-    };
-
-    invoke_signed(
-        &Instruction {
-            program_id,
-            accounts: &[AccountMeta::new(event_authority_info.key(), false, true)],
-            data: event.to_bytes().as_slice(),
-        },
-        &[event_authority_info],
-        &[Signer::from(&[
-            Seed::from(EVENT_AUTHORITY_SEED),
-            Seed::from(&[event_authority_pda::BUMP]),
-        ])],
-    )?;
 
     Ok(())
 }
 
 pub struct CompressAttestationsArgs {
     pub proof: CompressedProof,
-    pub close_accounts: bool,
     pub address_root_index: u16,
     pub num_attestations: u8,
 }
 
 impl CompressAttestationsArgs {
     pub fn process_instruction_data(data: &[u8]) -> Result<Self, ProgramError> {
-        // Expected: proof(128) + close_accounts(1) + address_root_index(2) + num_attestations(1) = 132 bytes
-        if data.len() < 132 {
+        // Expected: proof(128) + address_root_index(2) + num_attestations(1) = 131 bytes
+        if data.len() < 131 {
             return Err(ProgramError::InvalidInstructionData);
         }
         // Parse CompressedProof (128 bytes: 32 + 64 + 32)
         let (proof_bytes, remaining) = data.split_at(128);
         let proof = CompressedProof::try_from(proof_bytes)
             .map_err(|e| ProgramError::Custom(u32::from(e)))?;
-
-        // Parse close_accounts (1 byte)
-        let (close_bytes, remaining) = remaining.split_at(1);
-        let close_accounts = close_bytes[0] != 0;
 
         // Parse address_root_index (2 bytes)
         let (root_index_bytes, remaining) = remaining.split_at(2);
@@ -228,7 +214,6 @@ impl CompressAttestationsArgs {
 
         Ok(Self {
             proof,
-            close_accounts,
             address_root_index,
             num_attestations,
         })

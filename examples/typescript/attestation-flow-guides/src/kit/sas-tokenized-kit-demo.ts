@@ -97,17 +97,30 @@ async function setupWallets(client: Client) {
     const issuer = await generateKeyPairSigner();
     const testUser = await generateKeyPairSigner();
 
-    const airdrop = airdropFactory({
-      rpc: client.rpc,
-      rpcSubscriptions: client.rpcSubscriptions,
-    });
-    const airdropTx: Signature = await airdrop({
-      commitment: "processed",
-      lamports: lamports(BigInt(1_000_000_000)),
-      recipientAddress: payer.address,
-    });
+    // Only airdrop when running locally or in CI
+    if (process.env.CI || process.env.LOCAL) {
+      const airdrop = airdropFactory({
+        rpc: client.rpc,
+        rpcSubscriptions: client.rpcSubscriptions,
+      });
+      const airdropTx: Signature = await airdrop({
+        commitment: "processed",
+        lamports: lamports(BigInt(1_000_000_000)),
+        recipientAddress: payer.address,
+      });
+      await airdrop({
+        commitment: "processed",
+        lamports: lamports(BigInt(1_000_000_000)),
+        recipientAddress: issuer.address,
+      });
+      await airdrop({
+        commitment: "processed",
+        lamports: lamports(BigInt(1_000_000_000)),
+        recipientAddress: testUser.address,
+      });
 
-    console.log(`    - Airdrop completed: ${airdropTx}`);
+      console.log(`    - Airdrop completed: ${airdropTx}`);
+    }
     return { payer, authorizedSigner1, authorizedSigner2, issuer, testUser };
   } catch (error) {
     throw new Error(

@@ -49,6 +49,9 @@ pub enum SolanaAttestationServiceError {
     /// 12 - Invalid Address Tree (not the allowed tree for compressed attestations)
     #[error("Invalid Address Tree (not the allowed tree for compressed attestations)")]
     InvalidAddressTree = 0xC,
+    /// 13 - Compressed Attestation data size exceeds maximum allowed (550 bytes)
+    #[error("Compressed Attestation data size exceeds maximum allowed (550 bytes)")]
+    AttestationDataTooLarge = 0xD,
 }
 
 impl solana_program::program_error::PrintProgramError for SolanaAttestationServiceError {

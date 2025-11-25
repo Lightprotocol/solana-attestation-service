@@ -330,9 +330,8 @@ pub enum AttestationServiceInstruction {
         attestation_data: CloseAttestation,
     } = 13,
 
-    /// Compress N existing attestation PDAs into compressed accounts.
-    /// All attestations must share the same credential and schema.
-    /// Optionally close PDAs after compression.
+    /// Compress N existing attestation PDAs into compressed accounts and close the PDAs.
+    /// All attestations must share the same credential.
     #[account(0, writable, signer, name = "payer")]
     #[account(
         1,
@@ -369,10 +368,9 @@ pub enum AttestationServiceInstruction {
         name = "address_merkle_tree",
         desc = "V2 Address Merkle tree"
     )]
-    // Remaining accounts: attestation PDAs (writable if closing)
+    // Remaining accounts: attestation PDAs (writable)
     CompressAttestations {
         proof: [u8; 128],
-        close_accounts: bool,
         address_root_index: u16,
         num_attestations: u8,
     } = 14,

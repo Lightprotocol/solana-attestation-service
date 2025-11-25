@@ -6,9 +6,5 @@
 //!
 
 pub(crate) mod r#close_attestation_event;
-pub(crate) mod r#compress_attestation;
-pub(crate) mod r#compress_attestation_event;
 
 pub use self::r#close_attestation_event::*;
-pub use self::r#compress_attestation::*;
-pub use self::r#compress_attestation_event::*;

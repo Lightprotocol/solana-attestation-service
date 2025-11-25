@@ -42,7 +42,7 @@ pub struct TestFixtures {
 
 pub fn hash(attestation: &Attestation) -> [u8; 32] {
     use light_hasher::Hasher;
-    let mut metadata1 = [0u8; 96]; // 4 * 32 bytes for Pubkey
+    let mut metadata1 = [0u8; 96]; // 3 * 32 bytes for Pubkey
     metadata1[..32].copy_from_slice(attestation.nonce.as_ref());
     metadata1[32..64].copy_from_slice(attestation.signer.as_ref());
     metadata1[64..96].copy_from_slice(attestation.token_account.as_ref());

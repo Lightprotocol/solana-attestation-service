@@ -1030,10 +1030,6 @@
           }
         },
         {
-          "name": "closeAccounts",
-          "type": "bool"
-        },
-        {
           "name": "addressRootIndex",
           "type": "u16"
         },
@@ -1181,46 +1177,6 @@
       }
     },
     {
-      "name": "CompressAttestation",
-      "type": {
-        "kind": "struct",
-        "fields": [
-          {
-            "name": "schema",
-            "type": "publicKey"
-          },
-          {
-            "name": "attestationData",
-            "type": "bytes"
-          }
-        ]
-      }
-    },
-    {
-      "name": "CompressAttestationEvent",
-      "type": {
-        "kind": "struct",
-        "fields": [
-          {
-            "name": "discriminator",
-            "type": "u8"
-          },
-          {
-            "name": "pdasClosed",
-            "type": "bool"
-          },
-          {
-            "name": "attestations",
-            "type": {
-              "vec": {
-                "defined": "CompressAttestation"
-              }
-            }
-          }
-        ]
-      }
-    },
-    {
       "name": "CloseAttestation",
       "type": {
         "kind": "struct",
@@ -1314,6 +1270,11 @@
       "code": 12,
       "name": "InvalidAddressTree",
       "msg": "Invalid Address Tree (not the allowed tree for compressed attestations)"
+    },
+    {
+      "code": 13,
+      "name": "AttestationDataTooLarge",
+      "msg": "Compressed Attestation data size exceeds maximum allowed (550 bytes)"
     }
   ],
   "metadata": {

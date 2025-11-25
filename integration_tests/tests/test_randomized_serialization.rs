@@ -1,10 +1,6 @@
 use borsh::BorshDeserialize;
 use solana_attestation_service::{
-    events::{
-        CloseAttestationEvent as ProgramCloseAttestationEvent,
-        CompressAttestation as ProgramCompressAttestation,
-        CompressAttestationEvent as ProgramCompressAttestationEvent,
-    },
+    events::CloseAttestationEvent as ProgramCloseAttestationEvent,
     processor::{
         close_compressed_attestation::CloseCompressedAttestationArgs,
         compress_attestations::CompressAttestationsArgs,
@@ -16,45 +12,9 @@ use solana_attestation_service_client::{
         CloseCompressedAttestationInstructionArgs, CompressAttestationsInstructionArgs,
         CreateCompressedAttestationInstructionArgs,
     },
-    types::{CloseAttestationEvent, CompressAttestationEvent},
+    types::CloseAttestationEvent,
 };
 use solana_pubkey::Pubkey;
-
-#[test]
-fn test_compress_attestation_event_serialization_roundtrip_randomized() {
-    use rand::Rng;
-    let mut rng = rand::thread_rng();
-
-    for _ in 0..1000 {
-        let attestations: Vec<ProgramCompressAttestation> = (0..rng.gen_range(1..=10))
-            .map(|_| ProgramCompressAttestation {
-                schema: Pubkey::new_unique().to_bytes(),
-                attestation_data: (0..rng.gen_range(0..=500)).map(|_| rng.gen()).collect(),
-            })
-            .collect();
-
-        let original = ProgramCompressAttestationEvent {
-            discriminator: rng.gen(),
-            pdas_closed: rng.gen_bool(0.5),
-            attestations,
-        };
-
-        let serialized = original.to_bytes();
-        let deserialized = CompressAttestationEvent::try_from_slice(&serialized[8..]).unwrap();
-
-        assert_eq!(original.discriminator, deserialized.discriminator);
-        assert_eq!(original.pdas_closed, deserialized.pdas_closed);
-        assert_eq!(original.attestations.len(), deserialized.attestations.len());
-        for (prog, client) in original
-            .attestations
-            .iter()
-            .zip(deserialized.attestations.iter())
-        {
-            assert_eq!(prog.schema, client.schema.to_bytes());
-            assert_eq!(prog.attestation_data, client.attestation_data);
-        }
-    }
-}
 
 #[test]
 fn test_close_attestation_event_serialization_roundtrip_randomized() {
@@ -119,7 +79,6 @@ fn test_compress_attestations_instruction_data_serialization_roundtrip() {
 
         let original = CompressAttestationsInstructionArgs {
             proof,
-            close_accounts: rng.gen_bool(0.5),
             address_root_index: rng.gen::<u16>(),
             num_attestations: rng.gen_range(1..=255),
         };
@@ -130,7 +89,6 @@ fn test_compress_attestations_instruction_data_serialization_roundtrip() {
         assert_eq!(&original.proof[..32], &deserialized.proof.a);
         assert_eq!(&original.proof[32..96], &deserialized.proof.b);
         assert_eq!(&original.proof[96..128], &deserialized.proof.c);
-        assert_eq!(original.close_accounts, deserialized.close_accounts);
         assert_eq!(original.address_root_index, deserialized.address_root_index);
         assert_eq!(original.num_attestations, deserialized.num_attestations);
     }
